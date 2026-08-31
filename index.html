@@ -1705,6 +1705,41 @@
               return;
           }
 
+          // --- LOGIKA PENGGABUNGAN NPWPD / USAHA YANG SAMA ---
+          const mergedMap = {};
+          filtered.forEach(r => {
+              // Gunakan NPWPD (jika ada) atau Nama Usaha sebagai kunci unik
+              const key = (r.npwpd && r.npwpd !== "-") ? r.npwpd : r.namaUsaha;
+
+              if (!mergedMap[key]) {
+                  // Jika belum ada, masukkan data pertamanya
+                  mergedMap[key] = {
+                      namaWP: r.namaWP,
+                      npwpd: r.npwpd,
+                      nik: r.nik,
+                      namaUsaha: r.namaUsaha,
+                      alamatUsaha: r.alamatUsaha,
+                      statusRegistrasi: r.statusRegistrasi,
+                      // Ubah jenis pajak menjadi array agar bisa digabung unik
+                      pajakList: r.jenisPajak ? r.jenisPajak.split(",").map(p => p.trim()) : ["Pajak Reklame"]
+                  };
+              } else {
+                  // Jika NPWPD/Usaha sudah ada, gabungkan jenis pajaknya tanpa duplikat
+                  if (r.jenisPajak) {
+                      r.jenisPajak.split(",").forEach(p => {
+                          const cleanP = p.trim();
+                          if (!mergedMap[key].pajakList.includes(cleanP)) {
+                              mergedMap[key].pajakList.push(cleanP);
+                          }
+                      });
+                  }
+              }
+          });
+
+          // Ubah kembali objek gabungan menjadi array siap cetak
+          const finalDataToPrint = Object.values(mergedMap);
+          // ----------------------------------------------------
+
           showToast("Menyiapkan dokumen PDF...", "info");
 
           // Siapkan dokumen PDF (Mode Landscape agar tabel lega)
@@ -1712,8 +1747,8 @@
           const doc = new jsPDF('landscape'); 
 
           // Judul Dokumen
-          let title = "LAPORAN DATA OBJEK PAJAK DAERAH";
-          if (fPajak) title = "LAPORAN DATA " + fPajak.toUpperCase();
+          let title = "LAPORAN REKAPITULASI OBJEK PAJAK DAERAH";
+          if (fPajak) title = "LAPORAN REKAPITULASI " + fPajak.toUpperCase();
 
           doc.setFontSize(14);
           doc.setFont("helvetica", "bold");
@@ -1721,20 +1756,20 @@
           
           doc.setFontSize(10);
           doc.setFont("helvetica", "normal");
-          doc.text(`Total Data: ${filtered.length} Objek | Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`, 14, 22);
+          doc.text(`Total Wajib Pajak Unik: ${finalDataToPrint.length} Objek | Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`, 14, 22);
 
           // Siapkan Header & Baris Tabel
-          const tableColumn = ["No", "Nama Wajib Pajak", "Nama Usaha", "Kewajiban Pajak", "Alamat Usaha", "Status"];
+          const tableColumn = ["No", "Nama Wajib Pajak", "Nama Usaha", "Gabungan Kewajiban Pajak", "Alamat Usaha", "Status"];
           const tableRows = [];
 
-          filtered.forEach((r, index) => {
+          finalDataToPrint.forEach((item, index) => {
               const rowData = [
                   index + 1,
-                  r.namaWP + "\n" + (r.statusRegistrasi === "SUDAH_TERDAFTAR" ? "NPWPD: "+r.npwpd : "NIK: "+r.nik),
-                  r.namaUsaha,
-                  r.jenisPajak,
-                  r.alamatUsaha,
-                  r.statusRegistrasi === "SUDAH_TERDAFTAR" ? "Terdaftar" : "Baru"
+                  item.namaWP + "\n" + (item.statusRegistrasi === "SUDAH_TERDAFTAR" ? "NPWPD: "+item.npwpd : "NIK: "+item.nik),
+                  item.namaUsaha,
+                  item.pajakList.join(", "), // Menggabungkan list pajak dengan koma
+                  item.alamatUsaha,
+                  item.statusRegistrasi === "SUDAH_TERDAFTAR" ? "Terdaftar" : "Baru"
               ];
               tableRows.push(rowData);
           });
@@ -1746,12 +1781,12 @@
               startY: 28,
               theme: 'grid',
               styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
-              headStyles: { fillColor: [49, 46, 129], textColor: [255,255,255] }, // Warna ungu indigo
+              headStyles: { fillColor: [49, 46, 129], textColor: [255,255,255] },
               alternateRowStyles: { fillColor: [248, 250, 252] }
           });
 
-          // Simpan dengan nama file yang cerdas
-          let fileName = "Laporan_Pajak";
+          // Simpan dengan nama file
+          let fileName = "Rekap_Laporan_Pajak";
           if (fPajak) fileName += "_" + fPajak.replace(/[^a-zA-Z0-9]/g, "_");
           doc.save(fileName + ".pdf");
           showToast("PDF berhasil diunduh!", "success");
