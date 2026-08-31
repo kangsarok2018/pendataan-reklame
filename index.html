@@ -11,6 +11,9 @@
     <!-- Leaflet CSS & JS for GIS Geotagging Map -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- jsPDF untuk Cetak Tabel ke PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <!-- Google Fonts Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
 
@@ -522,6 +525,9 @@
               class="flex-1 sm:flex-none px-3 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition"
             >
               <i class="fa-solid fa-rotate"></i> Muat Ulang
+            </button>
+            <button onclick="exportTableToPDF()" class="hidden sm:flex px-3 py-2 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl hover:bg-rose-100 text-xs font-semibold items-center gap-1.5 shadow-sm transition">
+              <i class="fa-solid fa-file-pdf"></i> Export PDF
             </button>
             <button onclick="downloadTemplate()" class="hidden sm:flex px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl hover:bg-emerald-100 text-xs font-semibold items-center gap-1.5">
               <i class="fa-solid fa-file-excel"></i> Template Excel
@@ -1679,6 +1685,77 @@
                             e.target.setSelectionRange(start, end);
                         }
                     });
+
+      function exportTableToPDF() {
+          // Ambil nilai filter yang sedang aktif di layar
+          const q = document.getElementById("filterSearch").value.toLowerCase();
+          const reg = document.getElementById("filterRegistrasi").value;
+          const fPajak = document.getElementById("filterJenisPajak").value;
+
+          // Lakukan penyaringan data sesuai yang terlihat di layar
+          const filtered = records.filter((r) => {
+            const matchQ = r.namaWP.toLowerCase().includes(q) || r.namaUsaha.toLowerCase().includes(q) || r.judulReklame.toLowerCase().includes(q);
+            const matchReg = !reg || r.statusRegistrasi === reg;
+            const matchPajak = !fPajak || (r.jenisPajak && r.jenisPajak.includes(fPajak));
+            return matchQ && matchReg && matchPajak;
+          });
+
+          if (filtered.length === 0) {
+              showToast("Tidak ada data untuk di-export!", "error");
+              return;
+          }
+
+          showToast("Menyiapkan dokumen PDF...", "info");
+
+          // Siapkan dokumen PDF (Mode Landscape agar tabel lega)
+          const { jsPDF } = window.jspdf;
+          const doc = new jsPDF('landscape'); 
+
+          // Judul Dokumen
+          let title = "LAPORAN DATA OBJEK PAJAK DAERAH";
+          if (fPajak) title = "LAPORAN DATA " + fPajak.toUpperCase();
+
+          doc.setFontSize(14);
+          doc.setFont("helvetica", "bold");
+          doc.text(title, 14, 15);
+          
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "normal");
+          doc.text(`Total Data: ${filtered.length} Objek | Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`, 14, 22);
+
+          // Siapkan Header & Baris Tabel
+          const tableColumn = ["No", "Nama Wajib Pajak", "Nama Usaha", "Kewajiban Pajak", "Alamat Usaha", "Status"];
+          const tableRows = [];
+
+          filtered.forEach((r, index) => {
+              const rowData = [
+                  index + 1,
+                  r.namaWP + "\n" + (r.statusRegistrasi === "SUDAH_TERDAFTAR" ? "NPWPD: "+r.npwpd : "NIK: "+r.nik),
+                  r.namaUsaha,
+                  r.jenisPajak,
+                  r.alamatUsaha,
+                  r.statusRegistrasi === "SUDAH_TERDAFTAR" ? "Terdaftar" : "Baru"
+              ];
+              tableRows.push(rowData);
+          });
+
+          // Generate Tabel Otomatis
+          doc.autoTable({
+              head: [tableColumn],
+              body: tableRows,
+              startY: 28,
+              theme: 'grid',
+              styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+              headStyles: { fillColor: [49, 46, 129], textColor: [255,255,255] }, // Warna ungu indigo
+              alternateRowStyles: { fillColor: [248, 250, 252] }
+          });
+
+          // Simpan dengan nama file yang cerdas
+          let fileName = "Laporan_Pajak";
+          if (fPajak) fileName += "_" + fPajak.replace(/[^a-zA-Z0-9]/g, "_");
+          doc.save(fileName + ".pdf");
+          showToast("PDF berhasil diunduh!", "success");
+      }
     </script>
   </body>
 </html>
