@@ -1705,26 +1705,27 @@
               return;
           }
 
-          // --- LOGIKA PENGGABUNGAN NPWPD / USAHA YANG SAMA ---
+          // --- LOGIKA PENGGABUNGAN MUTLAK BERDASARKAN NPWPD / NAMA USAHA ---
           const mergedMap = {};
           filtered.forEach(r => {
-              // Gunakan NPWPD (jika ada) atau Nama Usaha sebagai kunci unik
-              const key = (r.npwpd && r.npwpd !== "-") ? r.npwpd : r.namaUsaha;
+              // Bersihkan NPWPD dari spasi ekstra agar benar-benar akurat
+              let cleanNpwpd = r.npwpd ? String(r.npwpd).trim() : "-";
+              
+              // Buat kunci unik: Jika ada NPWPD sah, pakai NPWPD. Jika tidak, pakai Nama Usaha.
+              const key = (cleanNpwpd !== "" && cleanNpwpd !== "-") ? cleanNpwpd : String(r.namaUsaha).trim().toUpperCase();
 
               if (!mergedMap[key]) {
-                  // Jika belum ada, masukkan data pertamanya
                   mergedMap[key] = {
                       namaWP: r.namaWP,
                       npwpd: r.npwpd,
                       nik: r.nik,
                       namaUsaha: r.namaUsaha,
-                      alamatUsaha: r.alamatUsaha,
+                      alamatUsaha: r.alamatUsaha, // Ambil alamat pertama
                       statusRegistrasi: r.statusRegistrasi,
-                      // Ubah jenis pajak menjadi array agar bisa digabung unik
                       pajakList: r.jenisPajak ? r.jenisPajak.split(",").map(p => p.trim()) : ["Pajak Reklame"]
                   };
               } else {
-                  // Jika NPWPD/Usaha sudah ada, gabungkan jenis pajaknya tanpa duplikat
+                  // Jika NPWPD sudah ada, gabungkan jenis pajaknya tanpa duplikat
                   if (r.jenisPajak) {
                       r.jenisPajak.split(",").forEach(p => {
                           const cleanP = p.trim();
@@ -1736,17 +1737,14 @@
               }
           });
 
-          // Ubah kembali objek gabungan menjadi array siap cetak
           const finalDataToPrint = Object.values(mergedMap);
           // ----------------------------------------------------
 
           showToast("Menyiapkan dokumen PDF...", "info");
 
-          // Siapkan dokumen PDF (Mode Landscape agar tabel lega)
           const { jsPDF } = window.jspdf;
           const doc = new jsPDF('landscape'); 
 
-          // Judul Dokumen
           let title = "LAPORAN REKAPITULASI OBJEK PAJAK DAERAH";
           if (fPajak) title = "LAPORAN REKAPITULASI " + fPajak.toUpperCase();
 
@@ -1756,9 +1754,8 @@
           
           doc.setFontSize(10);
           doc.setFont("helvetica", "normal");
-          doc.text(`Total Wajib Pajak Unik: ${finalDataToPrint.length} Objek | Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`, 14, 22);
+          doc.text(`Total Wajib Pajak Unik (Digabung): ${finalDataToPrint.length} Objek | Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`, 14, 22);
 
-          // Siapkan Header & Baris Tabel
           const tableColumn = ["No", "Nama Wajib Pajak", "Nama Usaha", "Gabungan Kewajiban Pajak", "Alamat Usaha", "Status"];
           const tableRows = [];
 
@@ -1767,14 +1764,13 @@
                   index + 1,
                   item.namaWP + "\n" + (item.statusRegistrasi === "SUDAH_TERDAFTAR" ? "NPWPD: "+item.npwpd : "NIK: "+item.nik),
                   item.namaUsaha,
-                  item.pajakList.join(", "), // Menggabungkan list pajak dengan koma
+                  item.pajakList.join(", "),
                   item.alamatUsaha,
                   item.statusRegistrasi === "SUDAH_TERDAFTAR" ? "Terdaftar" : "Baru"
               ];
               tableRows.push(rowData);
           });
 
-          // Generate Tabel Otomatis
           doc.autoTable({
               head: [tableColumn],
               body: tableRows,
@@ -1785,7 +1781,6 @@
               alternateRowStyles: { fillColor: [248, 250, 252] }
           });
 
-          // Simpan dengan nama file
           let fileName = "Rekap_Laporan_Pajak";
           if (fPajak) fileName += "_" + fPajak.replace(/[^a-zA-Z0-9]/g, "_");
           doc.save(fileName + ".pdf");
